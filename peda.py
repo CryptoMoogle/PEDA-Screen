@@ -3,7 +3,7 @@
 #       Copyright (C) 2012 Long Le Dinh <longld at vnsecurity.net>
 #
 #       License: see LICENSE file for details
-#
+# https://askubuntu.com/questions/46627/how-can-i-make-a-script-that-opens-terminal-windows-and-executes-commands-in-the
 
 from __future__ import absolute_import
 from __future__ import division
@@ -58,8 +58,15 @@ REGISTERS = {
     64: ["rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "rip",
          "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"]
 }
+# Start of cryptomoogle code ##############################################
+import subprocess
+screen_on = 0
 
-###########################################################################
+def clear_scr(x):
+    i = str(x)
+    subprocess.Popen(['echo -e "\033[2J" > /dev/pts/'+i], shell=True)
+    subprocess.Popen(['echo -n "\033[0;0H" > /dev/pts/'+i], shell=True)
+# End of cryptomoogle code ################################################
 class PEDA(object):
     """
     Class for actual functions of PEDA commands
@@ -4237,7 +4244,20 @@ class PEDACmd(object):
         pager(text)
 
         return
+# Start of cryptomoogle code ##############################################
+    def new_msg(self, text, scr=None):
+        """
+        Set 
+        """
+        if screen_on == 0:
+            msg(text)
+        else:
+            i = str(scr)
+            text = text.replace('"', '\\"')
 
+            subprocess.Popen(['echo "'+text+'" > /dev/pts/'+i], shell=True)
+        return
+# End of cryptomoogle code ################################################
     @msg.bufferize
     def context_register(self, *arg):
         """
@@ -4245,12 +4265,19 @@ class PEDACmd(object):
         Usage:
             MYNAME
         """
+# Start of cryptomoogle code ##############################################
+        if screen_on == 1:
+            clear_scr(5)
+# End of cryptomoogle code ################################################
         if not self._is_running():
             return
 
         pc = peda.getreg("pc")
         # display register info
-        msg("[%s]" % "registers".center(78, "-"), "blue")
+# Start of cryptomoogle code ##############################################
+        if screen_on != 1:
+# End of cryptomoogle code ################################################
+            msg("[%s]" % "registers".center(78, "-"), "blue")
         self.xinfo("register")
 
         return
@@ -4275,16 +4302,31 @@ class PEDACmd(object):
             inst = peda.get_disasm(pc)
         else:
             inst = None
-
-        text = blue("[%s]" % "code".center(78, "-"))
-        msg(text)
+# Start of cryptomoogle code ##############################################
+        heading = ""
+        if screen_on == 1:
+            clear_scr(2)
+            loc = gdb.selected_frame().name()
+            if loc:
+                loc = yellow(loc)
+            else:
+                loc = yellow("??")
+            rev = "%s, %s, %s, value" % (red("code"), blue("data"), green("rodata"))
+            heading = green(" Disassembly of function: {0:46} Legend: {1}\n".format(loc,rev))
+        else:
+# End of cryptomoogle code ################################################
+            text = blue("[%s]" % "code".center(78, "-"))
+            msg(text)
         if inst: # valid $PC
             text = ""
             opcode = inst.split(":\t")[-1].split()[0]
             # stopped at function call
             if "call" in opcode:
                 text += peda.disassemble_around(pc, count)
-                msg(format_disasm_code(text, pc))
+# Start of cryptomoogle code ##############################################
+                #msg(format_disasm_code(text, pc))
+                self.new_msg(heading+format_disasm_code(text, pc)[:-1],2) 
+# End of cryptomoogle code ################################################
                 self.dumpargs()
             # stopped at jump
             elif "j" in opcode:
@@ -4314,15 +4356,22 @@ class PEDACmd(object):
                 else: # JUMP is NOT taken
                     text += format_disasm_code(peda.disassemble_around(pc, count), pc)
                     text += "\n" + green("JUMP is NOT taken".rjust(79))
-
-                msg(text.rstrip())
+# Start of cryptomoogle code ##############################################
+                #msg(text.rstrip())
+                self.new_msg(heading+text.rstrip()[:-1], 2)
+# End of cryptomoogle code ################################################
             # stopped at other instructions
             else:
                 text += peda.disassemble_around(pc, count)
-                msg(format_disasm_code(text, pc))
+# Start of cryptomoogle code ##############################################
+                #msg(format_disasm_code(text, pc))
+                self.new_msg(heading+format_disasm_code(text, pc)[:-1], 2)
+# End of cryptomoogle code ################################################
         else: # invalid $PC
-            msg("Invalid $PC address: 0x%x" % pc, "red")
-
+# Start of cryptomoogle code ##############################################
+            #msg("Invalid $PC address: 0x%x" % pc, "red")
+            self.new_msg(heading+red("Invalid $PC address: 0x%x" % pc), 2)
+# End of cryptomoogle code ################################################
         return
 
     @msg.bufferize
@@ -4336,9 +4385,13 @@ class PEDACmd(object):
 
         if not self._is_running():
             return
-
-        text = blue("[%s]" % "stack".center(78, "-"))
-        msg(text)
+# Start of cryptomoogle code ##############################################
+        if screen_on == 1:
+            clear_scr(3)
+        else:
+# End of cryptomoogle code ################################################
+            text = blue("[%s]" % "stack".center(78, "-"))
+            msg(text)
         sp = peda.getreg("sp")
         if peda.is_address(sp):
             self.telescope(sp, count)
@@ -4355,9 +4408,12 @@ class PEDACmd(object):
         """
 
         (opt, count) = normalize_argv(arg, 2)
-
+# Start of cryptomoogle code ##############################################
+        if screen_on == 1:
+            count = 20
+# End of cryptomoogle code ################################################
         if to_int(count) is None:
-            count = 8
+            count = 10
         if opt is None:
             opt = config.Option.get("context")
         if opt == "all":
@@ -4387,8 +4443,17 @@ class PEDACmd(object):
         # display stack content, forced in case SIGSEGV
         if "stack" in opt or "SIGSEGV" in status:
             self.context_stack(count)
-        msg("[%s]" % ("-"*78), "blue")
-        msg("Legend: %s, %s, %s, value" % (red("code"), blue("data"), green("rodata")))
+# Start of cryptomoogle code ##############################################
+        if screen_on == 1:    
+            fi = peda.execute_redirect('x/80x $esp')
+            fi = fi.replace('\t', '  ')
+            clear_scr(4)
+            heading = green(" Stack Frame: memory dump format\n")
+            self.new_msg(heading+fi[:-1],4)
+        else:
+# End of cryptomoogle code ################################################
+            msg("[%s]" % ("-"*78), "blue")
+            msg("Legend: %s, %s, %s, value" % (red("code"), blue("data"), green("rodata")))
 
         # display stopped reason
         if "SIG" in status:
@@ -4766,9 +4831,14 @@ class PEDACmd(object):
             text += format_reference_chain(chain)
             text += "\n"
             idx += step
-
-        pager(text)
-
+# Start of cryptomoogle code ##############################################
+        heading = ""
+        text = text.replace('\t', ' ')
+        if screen_on == 1:
+            heading = green(" Stack Frame: Stack caller format\n")
+        #pager(text)
+        self.new_msg(heading+text[:-1], 3)
+# End of cryptomoogle code ################################################
         return
 
     def eflags(self, *arg):
@@ -4778,9 +4848,13 @@ class PEDACmd(object):
             MYNAME
             MYNAME [set|clear|toggle] flagname
         """
-        FLAGS = ["CF", "PF", "AF", "ZF", "SF", "TF", "IF", "DF", "OF"]
-        FLAGS_TEXT = ["Carry", "Parity", "Adjust", "Zero", "Sign", "Trap",
-                        "Interrupt", "Direction", "Overflow"]
+# Start of cryptomoogle code ##############################################
+#        FLAGS = ["CF", "PF", "AF", "ZF", "SF", "TF", "IF", "DF", "OF"]
+#        FLAGS_TEXT = ["Carry", "Parity", "Adjust", "Zero", "Sign", "Trap",
+#                        "Interrupt", "Direction", "Overflow"]
+        FLAGS = ["OF", "DF", "IF", "TF", "SF", "ZF", "AF", "PF", "CF"]
+        FLAGS_TEXT = ["O", "D", "I", "T", "S", "Z", "A", "P", "C"]
+# End of cryptomoogle code ################################################
 
         (option, flagname) = normalize_argv(arg, 2)
         if not self._is_running():
@@ -4799,7 +4873,10 @@ class PEDACmd(object):
                     text += "%s " % green(FLAGS_TEXT[i].lower())
 
             eflags = peda.getreg("eflags")
-            msg("%s: 0x%x (%s)" % (green("EFLAGS"), eflags, text.strip()))
+# Start of cryptomoogle code ##############################################
+            #msg("%s: 0x%x (%s)" % (green("EFLAGS"), eflags, text.strip()))
+            self.new_msg("%s: 0x%x (%s)" % (green("EFLAGS"), eflags, text.strip()), 5)
+# End of cryptomoogle code ################################################
 
         elif option == "set":
             peda.set_eflags(flagname, True)
@@ -4848,7 +4925,16 @@ class PEDACmd(object):
                 for (r, v) in sorted(regs.items()):
                     text += get_reg_text(r, v)
             if text:
-                msg(text.strip())
+# Start of cryptomoogle code ##############################################
+                heading = ""
+                if screen_on == 1:
+                    heading = green(" Register dump\n")
+                fi = text.strip()
+                fi = fi.replace('\t', ' ')
+                
+                #msg(text.strip())
+                self.new_msg(heading+fi, 5)
+# End of cryptomoogle code ################################################
             if regname is None or "eflags" in regname:
                 self.eflags()
             return
@@ -5997,8 +6083,40 @@ class PEDACmd(object):
         msg(result)
         return
     utils.options = ["int2hexstr", "list2hexstr", "str2intlist"]
+    
+# Start of cryptomoogle code ##############################################
+    def scron(self):
+        """
+        Turns on extended screens for gdb debugger
+        """
+        global screen_on
+        screen_on = 1
+        subprocess.Popen("konsole -p 'TerminalColumns=148' -p 'TerminalRows=46' -geometry -5+5 -e /usr/share/gdb-peda/tmux.sh", shell=True)
+        return
+# End of cryptomoogle code ################################################
+# Start of cryptomoogle code ##############################################
+    def scrclr(self):
+        """
+        Clears all the extended debugging screens
+        """
+        global screen_on
+        screen_on = 1
+        clear_scr(2)
+        clear_scr(3)
+        clear_scr(4)
+        clear_scr(5)
+        return
+# End of cryptomoogle code ################################################
+# Start of cryptomoogle code ##############################################
+    def scroff(self):
+        """
+        Turns off the extended screens for gdb debugger
+        """
+        global screen_on
+        screen_on = 0
+        return
+# End of cryptomoogle code ################################################
 
-###########################################################################
 class pedaGDBCommand(gdb.Command):
     """
     Wrapper of gdb.Command for master "peda" command
@@ -6146,6 +6264,10 @@ Alias("stack", "peda telescope $sp")
 Alias("viewmem", "peda telescope")
 Alias("reg", "peda xinfo register")
 Alias("brva", "breakrva")
+# Start of cryptomoogle code ##############################################
+Alias("con", "continue")
+Alias("sec", "checksec")
+# End of cryptomoogle code ################################################
 
 # misc gdb settings
 peda.execute("set confirm off")
