@@ -4445,7 +4445,10 @@ class PEDACmd(object):
             self.context_stack(count)
 # Start of cryptomoogle code ##############################################
         if screen_on == 1:    
-            fi = peda.execute_redirect('x/80x $esp')
+            if "64" in peda.execute_redirect('show architecture'):
+                fi = peda.execute_redirect('x/40x $rsp')
+            else:
+                fi = peda.execute_redirect('x/80x $esp')
             fi = fi.replace('\t', '  ')
             clear_scr(4)
             heading = green(" Stack Frame: memory dump format\n")
